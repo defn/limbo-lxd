@@ -1,0 +1,6 @@
+{
+  "require": [
+    "limbo",
+    "lxc"
+  ]
+}
