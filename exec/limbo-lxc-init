@@ -10,6 +10,17 @@ function main {
   lxc remote remove "$BASEBOX_INSTANCE" 2>&- || true
   echo y | lxc remote add "$BASEBOX_INSTANCE" "$BASEBOX_IP" --password=ubuntu
   lxc remote set-default "$BASEBOX_INSTANCE" 
+
+	vagrant ssh -- sudo route add -net "${BASEBOX_DOCKER_NETWORK_PREFIX}.0" netmask 255.255.255.0 gw $(lxc info docker | egrep 'eth0:\tinet\t' | awk '{print $3}')
+
+	lxc exec docker -- apt install -y docker.io
+	echo "DOCKER_OPTS='-H tcp://0.0.0.0:2376 -H unix:///var/run/docker.sock --storage-driver overlay --bip ${BASEBOX_DOCKER_NETWORK_PREFIX}.1/24'" | van lxc exec docker -- tee /etc/default/docker
+	lxc exec docker -- service docker restart
+
+	lxc list
+	lxc exec docker -- docker info
+	lxc exec docker -- docker network inspect bridge
+	lxc info
 }
 
 source sub "$BASH_SOURCE" "$@"
