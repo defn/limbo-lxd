@@ -13,7 +13,7 @@ function main {
 
 	lxc profile create limbo
 	lxc profile set limbo user.user-data - < "$BLOCK_HOME/limbo/cidata/user-data"
-	lxc launch xenial docker p default -p docker -p limbo
+	lxc launch xenial docker -p default -p docker -p limbo
 	"$BASEBOX_INSTANCE" vagrant ssh -- sudo route add -net "${BASEBOX_DOCKER_NETWORK_PREFIX}.0" netmask 255.255.255.0 gw $(lxc info docker | egrep 'eth0:\tinet\t' | awk '{print $3}')
 
 	lxc exec docker -- touch /root/.cloud-init.hostname
