@@ -28,6 +28,7 @@ function main {
 
 	"$BASEBOX_INSTANCE" vagrant ssh -- sudo route add -net "${BASEBOX_DOCKER_NETWORK_PREFIX}.0" netmask 255.255.255.0 gw $(lxc info docker | egrep 'eth0:\tinet\t' | awk '{print $3}')
 	lxc restart docker
+  lxc config set docker boot.autostart true
 
 	lxc list
 	lxc exec docker -- docker info
