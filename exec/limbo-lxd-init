@@ -27,8 +27,11 @@ function main {
 	echo "DOCKER_OPTS='-H tcp://0.0.0.0:2376 -H unix:///var/run/docker.sock --storage-driver overlay --bip ${BASEBOX_DOCKER_NETWORK_PREFIX}.1/24'" | lxc exec docker -- tee /etc/default/docker
 
 	"$BASEBOX_INSTANCE" vagrant ssh -- sudo route add -net "${BASEBOX_DOCKER_NETWORK_PREFIX}.0" netmask 255.255.255.0 gw $(lxc info docker | egrep 'eth0:\tinet\t' | awk '{print $3}')
-	lxc restart docker
+	lxc stop docker
   lxc config set docker boot.autostart true
+  lxc config set docker security.nesting true
+  lxc config set docker security.privileged true
+	lxc start docker
 
 	lxc list
 	lxc exec docker -- docker info
