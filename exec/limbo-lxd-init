@@ -13,7 +13,7 @@ function main {
 
 	lxc profile create limbo
 	lxc profile set limbo user.user-data - < "$BLOCK_PATH/limbo/cidata/user-data"
-	lxc launch xenial docker -p default -p docker -p limbo
+	lxc launch xenial docker -p default -p docker -p limbo -c boot.autostart=true -c security.nesting=true -c security.privileged=true
 
 	lxc exec docker -- touch /root/.cloud-init.hostname
 	lxc exec docker -- rm -f /var/lib/cloud/instance
@@ -23,20 +23,18 @@ function main {
 
 	lxc exec docker -- apt update
 	lxc exec docker -- env DEBIAN_FRONTEND=noninteractive apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" upgrade -y
-	lxc exec docker -- env DEBIAN_FRONTEND=noninteractive apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" install -y docker.io
+
 	echo "DOCKER_OPTS='-H tcp://0.0.0.0:2376 -H unix:///var/run/docker.sock --storage-driver overlay --bip ${BASEBOX_DOCKER_NETWORK_PREFIX}.1/24'" | lxc exec docker -- tee /etc/default/docker
+	lxc exec docker -- env DEBIAN_FRONTEND=noninteractive apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" install -y docker.io
 
 	"$BASEBOX_INSTANCE" vagrant ssh -- sudo route add -net "${BASEBOX_DOCKER_NETWORK_PREFIX}.0" netmask 255.255.255.0 gw $(lxc info docker | egrep 'eth0:\tinet\t' | awk '{print $3}')
-	lxc stop docker
-  lxc config set docker boot.autostart true
-  lxc config set docker security.nesting true
-  lxc config set docker security.privileged true
-	lxc start docker
+	lxc restart docker
+  sleep 5
 
-	lxc list
 	lxc exec docker -- docker info
 	lxc exec docker -- docker network inspect bridge
 	lxc info
+	lxc list
 }
 
 source sub "$BASH_SOURCE" "$@"
