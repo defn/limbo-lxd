@@ -21,6 +21,7 @@ function main {
 	lxc exec docker -- rm -f /var/lib/cloud/instance
 	lxc exec docker -- cloud-init init
 
+  sleep 10
 	lxc exec docker -- apt update
 	lxc exec docker -- env DEBIAN_FRONTEND=noninteractive apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" upgrade -y
 
