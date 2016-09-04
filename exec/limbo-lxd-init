@@ -15,7 +15,7 @@ function main {
 	lxc profile set limbo user.user-data - < "$BLOCK_PATH/limbo/cidata/user-data"
 	lxc launch xenial docker -p default -p docker -p limbo -c boot.autostart=true -c security.nesting=true -c security.privileged=true
 
-  echo "Acquire::http::Proxy \"$CACHE_VIP\";" | lxc exec docker -- tee /etc/apt/apt.conf.d/99boxcache
+  echo "Acquire::http::Proxy \"http://$CACHE_VIP:3128\";" | lxc exec docker -- tee /etc/apt/apt.conf.d/99boxcache
 
 	lxc exec docker -- touch /root/.cloud-init.hostname
 	lxc exec docker -- rm -rf /var/lib/cloud/instance
