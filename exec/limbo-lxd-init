@@ -20,9 +20,9 @@ function main {
   fi
 
 	lxc exec docker -- touch /root/.cloud-init.hostname
-	lxc exec docker -- rm -f /var/lib/cloud/instance
+	lxc exec docker -- rm -rf /var/lib/cloud/instance
 	lxc exec docker -- cloud-init init
-	lxc exec docker -- rm -f /var/lib/cloud/instance
+	lxc exec docker -- rm -rf /var/lib/cloud/instance
 	lxc exec docker -- cloud-init init
 
   sleep 10
