@@ -11,9 +11,9 @@ function main {
   echo y | lxc remote add "$BASEBOX_INSTANCE" "$BASEBOX_IP" --password=ubuntu
   lxc remote set-default "$BASEBOX_INSTANCE" 
 
-	lxc profile create limbo
+	lxc profile create limbo || true
 	lxc profile set limbo user.user-data - < "$BLOCK_PATH/limbo/cidata/user-data"
-	lxc launch xenial docker -p default -p docker -p limbo -c boot.autostart=true -c security.nesting=true -c security.privileged=true
+	lxc launch xenial docker -p default -p docker -p limbo -c boot.autostart=true -c security.nesting=true -c security.privileged=true || true
 
   echo "Acquire::http::Proxy \"http://$CACHE_VIP:3128\";" | lxc exec docker -- tee /etc/apt/apt.conf.d/99boxcache
 
