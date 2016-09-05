@@ -13,9 +13,6 @@ function main {
 
 	lxc profile create limbo || true
 	lxc profile set limbo user.user-data - < "$BLOCK_PATH/limbo/cidata/user-data"
-
-	lxc info
-	lxc list
 }
 
 source sub "$BASH_SOURCE" "$@"
