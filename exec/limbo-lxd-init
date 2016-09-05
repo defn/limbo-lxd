@@ -10,9 +10,6 @@ function main {
   lxc remote remove "$BASEBOX_INSTANCE" 2>/dev/null || true
   echo y | lxc remote add "$BASEBOX_INSTANCE" "$BASEBOX_IP" --password=ubuntu
   lxc remote set-default "$BASEBOX_INSTANCE" 
-
-	lxc profile create limbo || true
-	lxc profile set limbo user.user-data - < "$BLOCK_PATH/limbo/cidata/user-data"
 }
 
 source sub "$BASH_SOURCE" "$@"
