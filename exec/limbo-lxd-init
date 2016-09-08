@@ -8,7 +8,7 @@ function main {
   rm -rf "$LXD_CONF"
   mkdir -p "$LXD_CONF"
   lxc remote remove "$BASEBOX_INSTANCE" 2>/dev/null || true
-  echo y | lxc remote add "$BASEBOX_INSTANCE" "$BASEBOX_IP" --password=ubuntu
+  lxc remote add --accept-certificate "$BASEBOX_INSTANCE" "$BASEBOX_IP" --password=ubuntu
   lxc remote set-default "$BASEBOX_INSTANCE" 
 }
 
