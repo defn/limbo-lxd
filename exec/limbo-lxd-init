@@ -4,9 +4,39 @@ function main {
   local shome="${_limbo_home:-"$(cd -P -- "$(dirname -- "$BASH_SOURCE")/.." && pwd -P)"}"
   source "$shome/script/profile"
 
+  local net_lxd="$1"; shift
+
   set -x
+
   rm -rf "$LXD_CONF"
   mkdir -p "$LXD_CONF"
+
+  "${BASEBOX_INSTANCE}" vagrant ssh -- service lxd stop 2>/dev/null || true
+
+  cat <<EOF | "${BASEBOX_INSTANCE}" vagrant ssh -- tee /etc/default/lxd-bridge
+USE_LXD_BRIDGE="true"
+LXD_BRIDGE="lxdbr0"
+UPDATE_PROFILE="true"
+LXD_CONFILE=""
+LXD_DOMAIN="lxd"
+LXD_IPV4_ADDR="${net_lxd}.1"
+LXD_IPV4_NETMASK="255.255.255.0"
+LXD_IPV4_NETWORK="${net_lxd}.1/24"
+LXD_IPV4_DHCP_RANGE="${net_lxd}.10,${net_lxd}.200"
+LXD_IPV4_DHCP_MAX="191"
+LXD_IPV4_NAT="true"
+LXD_IPV6_ADDR=""
+LXD_IPV6_MASK=""
+LXD_IPV6_NETWORK=""
+LXD_IPV6_NAT="false"
+LXD_IPV6_PROXY="false"
+EOF
+
+  "${BASEBOX_INSTANCE}" vagrant ssh -- service lxd start
+
+  "${BASEBOX_INSTANCE}" vagrant ssh -- lxc config set core.https_address '[::]'
+  "${BASEBOX_INSTANCE}" vagrant ssh -- lxc config set core.trust_password ubuntu
+
   lxc remote remove "$BASEBOX_INSTANCE" 2>/dev/null || true
   lxc remote add --accept-certificate "$BASEBOX_INSTANCE" "$BASEBOX_IP" --password=ubuntu
   lxc remote set-default "$BASEBOX_INSTANCE" 
