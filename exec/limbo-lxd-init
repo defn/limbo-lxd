@@ -11,9 +11,9 @@ function main {
   rm -rf "$LXD_CONF"
   mkdir -p "$LXD_CONF"
 
-  "${BASEBOX_INSTANCE}" vagrant ssh -- service lxd stop 2>/dev/null || true
+  "${BASEBOX_INSTANCE}" vagrant ssh -- sudo service lxd stop 2>/dev/null || true
 
-  cat <<EOF | "${BASEBOX_INSTANCE}" vagrant ssh -- tee /etc/default/lxd-bridge
+  cat <<EOF | "${BASEBOX_INSTANCE}" vagrant ssh -- sudo tee /etc/default/lxd-bridge
 USE_LXD_BRIDGE="true"
 LXD_BRIDGE="lxdbr0"
 UPDATE_PROFILE="true"
@@ -32,10 +32,11 @@ LXD_IPV6_NAT="false"
 LXD_IPV6_PROXY="false"
 EOF
 
-  "${BASEBOX_INSTANCE}" vagrant ssh -- service lxd start
+  "${BASEBOX_INSTANCE}" vagrant ssh -- sudo service lxd start
 
-  "${BASEBOX_INSTANCE}" vagrant ssh -- lxc config set core.https_address '[::]'
-  "${BASEBOX_INSTANCE}" vagrant ssh -- lxc config set core.trust_password ubuntu
+  "${BASEBOX_INSTANCE}" vagrant ssh -- sudo lxc config set core.https_address '[::]'
+  "${BASEBOX_INSTANCE}" vagrant ssh -- sudo lxc config set core.trust_password ubuntu
+  "${BASEBOX_INSTANCE}" vagrant ssh -- sudo chown -R ubuntu:ubuntu /home/ubuntu/.config 2>/dev/null || true
 
   lxc remote remove "$BASEBOX_INSTANCE" 2>/dev/null || true
   lxc remote add --accept-certificate "$BASEBOX_INSTANCE" "$BASEBOX_IP" --password=ubuntu
