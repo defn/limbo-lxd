@@ -41,6 +41,9 @@ EOF
   lxc remote remove "$BASEBOX_INSTANCE" 2>/dev/null || true
   lxc remote add --accept-certificate "$BASEBOX_INSTANCE" "$BASEBOX_IP" --password=ubuntu
   lxc remote set-default "$BASEBOX_INSTANCE" 
+
+  lxc profile set default security.nesting true
+  lxc profile set default security.privileged false
 }
 
 source sub "$BASH_SOURCE" "$@"
