@@ -18,7 +18,7 @@ USE_LXD_BRIDGE="true"
 LXD_BRIDGE="lxdbr0"
 UPDATE_PROFILE="true"
 LXD_CONFILE=""
-LXD_DOMAIN="lxd"
+LXD_DOMAIN="${BASEBOX_INSTANCE}"
 LXD_IPV4_ADDR="${net_lxd}.1"
 LXD_IPV4_NETMASK="255.255.255.0"
 LXD_IPV4_NETWORK="${net_lxd}.1/24"
@@ -44,6 +44,9 @@ EOF
 
   lxc profile set default security.nesting true
   lxc profile set default security.privileged false
+
+  "${BASEBOX_INSTANCE}" vagrant ssh -- lxc image copy ubuntu:14.04 local: --alias trusty
+  "${BASEBOX_INSTANCE}" vagrant ssh -- lxc image copy ubuntu:16.04 local: --alias xenial
 }
 
 source sub "$BASH_SOURCE" "$@"
