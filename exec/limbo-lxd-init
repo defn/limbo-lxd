@@ -45,7 +45,6 @@ EOF
   lxc profile set default security.nesting true
   lxc profile set default security.privileged false
 
-  "${BASEBOX_INSTANCE}" vagrant ssh -- lxc image copy ubuntu:14.04 local: --alias trusty
   "${BASEBOX_INSTANCE}" vagrant ssh -- lxc image copy ubuntu:16.04 local: --alias xenial
 }
 
