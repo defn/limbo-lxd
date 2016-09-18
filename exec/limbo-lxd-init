@@ -64,7 +64,7 @@ EOF
   lxc remote rename "$BASEBOX_INSTANCE" "$BASEBOX_INSTANCE".old 2>/dev/null || true
   lxc remote add --accept-certificate "$BASEBOX_INSTANCE" "$ip_dream" --password="$lxd_pass"
   lxc remote set-default "$BASEBOX_INSTANCE" 
-  lxc remote remove "$BASEBOX_INSTANCE".old
+  lxc remote remove "$BASEBOX_INSTANCE".old 2>/dev/null || true
 
   lxc profile set default security.nesting true
   lxc profile set default security.privileged false
