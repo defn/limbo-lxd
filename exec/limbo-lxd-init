@@ -5,6 +5,7 @@ function main {
   source "$shome/script/profile"
 
   local net_lxd="$1"; shift
+  local net_host="$1"; shift
 
   set -x
 
@@ -30,6 +31,13 @@ LXD_IPV6_MASK=""
 LXD_IPV6_NETWORK=""
 LXD_IPV6_NAT="false"
 LXD_IPV6_PROXY="false"
+EOF
+
+		cat <<EOF | "${BASEBOX_INSTANCE}" vagrant ssh -- sudo tee /etc/network/interfaces.d/99-limbo-fan.cfg
+auto lxdbr0
+iface lxdbr0 inet manual
+	up ip addr add "${net_host}.1/24" dev lxdbr0:0
+	up fanctl up -o 250.0.0.0/8 -u "${net_host}.1/16"
 EOF
 
   "${BASEBOX_INSTANCE}" vagrant ssh -- sudo service lxd start
