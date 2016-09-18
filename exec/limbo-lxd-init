@@ -50,8 +50,10 @@ EOF
     "${BASEBOX_INSTANCE}" vagrant ssh -- sudo service lxd start
 
     vagrant=("${BASEBOX_INSTANCE}" vagrant ssh --)
+    local ip_dream="$BASEBOX_IP"
   else
     vagrant=("${BASEBOX_DREAM}" lxc exec "${BASEBOX_INSTANCE}" --)
+    local ip_dream="$("${BASEBOX_DREAM}" lxc list --format=json "${BASEBOX_INSTANCE}" | jq -r '.[] | .state.network.eth0.addresses[] | select(.scope == "global") | .address')"
   fi
 
   local lxd_pass="${RANDOM}-$$-$(date +%s)"
@@ -60,7 +62,7 @@ EOF
   vagrant sudo lxc config set core.trust_password "$lxd_pass"
 
   lxc remote rename "$BASEBOX_INSTANCE" "$BASEBOX_INSTANCE".old 2>/dev/null || true
-  lxc remote add --accept-certificate "$BASEBOX_INSTANCE" "$("${BASEBOX_DREAM}" lxc list --format=json "${BASEBOX_INSTANCE}" | jq -r '.[] | .state.network.eth0.addresses[] | select(.scope == "global") | .address')" --password="$lxd_pass"
+  lxc remote add --accept-certificate "$BASEBOX_INSTANCE" "$ip_dream" --password="$lxd_pass"
   lxc remote set-default "$BASEBOX_INSTANCE" 
   lxc remote remove "$BASEBOX_INSTANCE".old
 
