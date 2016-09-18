@@ -69,6 +69,7 @@ EOF
   lxc profile set default security.nesting true
   lxc profile set default security.privileged false
 
+  vagrant sudo chown -R ubuntu:ubuntu .config
   vagrant lxc image copy ubuntu:16.04 local: --alias xenial
 
   lxc profile create limbo 2>/dev/null || true
