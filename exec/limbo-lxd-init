@@ -38,6 +38,7 @@ auto lxdbr0
 iface lxdbr0 inet manual
 	up ip addr add "${net_host}.1/24" dev lxdbr0:0
 	up fanctl up -o 250.0.0.0/8 -u "${net_host}.1/16"
+  up ip route add 250.${net_lxd##*.}.0/16 via ${net_lxd}.1
 EOF
 
   "${BASEBOX_INSTANCE}" vagrant ssh -- sudo service lxd start
