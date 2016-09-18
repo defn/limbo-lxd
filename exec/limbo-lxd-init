@@ -51,9 +51,11 @@ EOF
 
     vagrant=("${BASEBOX_INSTANCE}" vagrant ssh --)
     local ip_dream="$BASEBOX_IP"
+    local fl_privileged=false
   else
     vagrant=("${BASEBOX_DREAM}" lxc exec "${BASEBOX_INSTANCE}" --)
     local ip_dream="$("${BASEBOX_DREAM}" lxc list --format=json "${BASEBOX_INSTANCE}" | jq -r '.[] | .state.network.eth0.addresses[] | select(.scope == "global") | .address')"
+    local fl_privileged=true
   fi
 
   local lxd_pass="${RANDOM}-$$-$(date +%s)"
@@ -67,7 +69,8 @@ EOF
   lxc remote remove "$BASEBOX_INSTANCE"old 2>/dev/null || true
 
   lxc profile set default security.nesting true
-  lxc profile set default security.privileged false
+  lxc profile set default security.privileged "$fl_privileged"
+  lxc profile set user.network_mode "dhcp"
 
   vagrant sudo chown -R ubuntu:ubuntu .config
   vagrant lxc image copy ubuntu:16.04 local: --alias xenial
