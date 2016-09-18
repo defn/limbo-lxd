@@ -1,20 +1,27 @@
 #!/usr/bin/env bash
 
+vagrant=""
+
+function vagrant {
+  command "${vagrant[@]}" "$@"
+}
+
 function main {
   local shome="$(cd -P -- "${BASH_SOURCE%/*}/.." && pwd -P)"
   source "$shome/script/profile"
-
-  local net_lxd="$1"; shift
-  local net_host="$1"; shift
-
+  
   set -x
 
-  rm -rf "$LXD_CONF"
-  mkdir -p "$LXD_CONF"
+  if [[ "$#" -gt 0 ]]; then
+    local net_lxd="$1"; shift
+    local net_host="$1"; shift
 
-  "${BASEBOX_INSTANCE}" vagrant ssh -- sudo service lxd stop 2>/dev/null || true
+    rm -rf "$LXD_CONF"
+    mkdir -p "$LXD_CONF"
 
-  cat <<EOF | "${BASEBOX_INSTANCE}" vagrant ssh -- sudo tee /etc/default/lxd-bridge
+    "${BASEBOX_INSTANCE}" vagrant ssh -- sudo service lxd stop 2>/dev/null || true
+
+    cat <<EOF | "${BASEBOX_INSTANCE}" vagrant ssh -- sudo tee /etc/default/lxd-bridge
 USE_LXD_BRIDGE="true"
 LXD_BRIDGE="lxdbr0"
 UPDATE_PROFILE="true"
@@ -33,27 +40,33 @@ LXD_IPV6_NAT="false"
 LXD_IPV6_PROXY="false"
 EOF
 
-		cat <<EOF | "${BASEBOX_INSTANCE}" vagrant ssh -- sudo tee /etc/network/interfaces.d/99-limbo-fan.cfg
+      cat <<EOF | "${BASEBOX_INSTANCE}" vagrant ssh -- sudo tee /etc/network/interfaces.d/99-limbo-fan.cfg
 auto lxdbr0
 iface lxdbr0 inet manual
-	up ip addr add "${net_host}.1/24" dev lxdbr0:0
-	up fanctl up -o 250.0.0.0/8 -u "${net_host}.1/16"
+  up ip addr add "${net_host}.1/24" dev lxdbr0:0
+  up fanctl up -o 250.0.0.0/8 -u "${net_host}.1/16"
 EOF
 
-  "${BASEBOX_INSTANCE}" vagrant ssh -- sudo service lxd start
+    "${BASEBOX_INSTANCE}" vagrant ssh -- sudo service lxd start
 
-  "${BASEBOX_INSTANCE}" vagrant ssh -- sudo lxc config set core.https_address '[::]'
-  "${BASEBOX_INSTANCE}" vagrant ssh -- sudo lxc config set core.trust_password ubuntu
-  "${BASEBOX_INSTANCE}" vagrant ssh -- sudo chown -R ubuntu:ubuntu /home/ubuntu/.config 2>/dev/null || true
+    vagrant=("${BASEBOX_INSTANCE}" vagrant ssh --)
+  else
+    vagrant=("${BASEBOX_DREAM}" lxc exec "${BASEBOX_INSTANCE}" --)
+  fi
+
+  local lxd_pass="${RANDOM}-$$-$(date +%s)"
+
+  vagrant sudo lxc config set core.https_address '[::]'
+  vagrant sudo lxc config set core.trust_password "$lxd_pass"
 
   lxc remote remove "$BASEBOX_INSTANCE" 2>/dev/null || true
-  lxc remote add --accept-certificate "$BASEBOX_INSTANCE" "$BASEBOX_IP" --password=ubuntu
+  lxc remote add --accept-certificate "$BASEBOX_INSTANCE" "$("${BASEBOX_DREAM}" lxc list --format=json "${BASEBOX_INSTANCE}" | jq -r '.[] | .state.network.eth0.addresses[] | select(.scope == "global") | .address')" --password="$lxd_pass"
   lxc remote set-default "$BASEBOX_INSTANCE" 
 
   lxc profile set default security.nesting true
   lxc profile set default security.privileged false
 
-  "${BASEBOX_INSTANCE}" vagrant ssh -- lxc image copy ubuntu:16.04 local: --alias xenial
+  vagrant lxc image copy ubuntu:16.04 local: --alias xenial
 
   lxc profile create limbo 2>/dev/null || true
   lxc profile set limbo user.user-data - < "$shome/cidata/user-data"
