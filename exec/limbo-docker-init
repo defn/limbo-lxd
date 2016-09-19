@@ -1,0 +1,167 @@
+#!/usr/bin/env bash
+
+function vagrant {
+  (unset VAGRANT_DEFAULT_PROVIDER; limbo vagrant ssh -- "$@")
+}
+
+function lxc {
+  limbo lxc "$@"
+}
+
+function main {
+  local shome="$(cd -P -- "${BASH_SOURCE%/*}/.." && pwd -P)"
+  source "$shome/script/profile"
+
+  local nm_lxd=
+  local nm_snapshot=
+
+  nm_lxd="$1"; shift
+  if [[ -n "${1:-}" ]]; then
+    nm_snapshot="$1"; shift
+  fi
+
+  set -x
+
+  if [[ -n "$nm_snapshot" ]]; then
+    local nm_snapshot_lvm=
+    if [[ -n "${1:-}" ]]; then
+      nm_snapshot_lvm="$1"; shift
+    else
+      nm_snapshot_lvm="$nm_snapshot"
+  fi
+
+    if ! lxc copy "$nm_snapshot" "${nm_lxd}"; then
+      lxc stop "${nm_lxd}"
+    fi
+    vagrant sudo lvcreate -s -n "${nm_lxd}" "$nm_snapshot_lvm"
+    vagrant sudo lvchange -ay -K "inception/${nm_lxd}"
+    lxc config device set "${nm_lxd}" docker source "/dev/inception/${nm_lxd}"
+    lxc start "${nm_lxd}"
+  else
+    lxc launch xenial "${nm_lxd}" -p default -p docker -p limbo -c boot.autostart=false
+    lxc exec "${nm_lxd}" -- touch /root/.cloud-init.hostname
+    while true; do
+      case "$(echo | lxc exec "${nm_lxd}" -- systemctl is-active cloud-final.service)" in
+        active|failed) break ;;
+        *) sleep 2 ;;
+      esac
+    done
+
+    for a in 1 2; do
+      lxc exec "${nm_lxd}" -- rm -f /var/lib/cloud/instance
+      lxc exec "${nm_lxd}" -- cloud-init init
+    done
+
+  cat <<EOF | lxc exec "${nm_lxd}" -- tee /etc/cloud/cloud.cfg.d/99-disable-network-config.cfg
+network: {config: disabled}
+EOF
+
+  cat <<EOF | lxc exec "${nm_lxd}" -- tee /etc/network/interfaces.d/50-cloud-init.cfg
+auto lo
+iface lo inet loopback
+
+auto eth0
+iface eth0 inet dhcp
+  up sleep 5
+  up fanctl up -o 250.0.0.0/8 -u eth0/16 --dhcp
+EOF
+
+    lxc exec "${nm_lxd}" -- systemctl enable lxd.service
+
+    {
+      echo "Acquire::http::Proxy \"http://$CACHE_VIP:3128\";" 
+      echo 'Acquire::Languages "none";'
+    } > ".99boxcache.$$" 
+    lxc file push ".99boxcache.$$" "${nm_lxd}"/etc/apt/apt.conf.d/99boxcache
+    rm -f ".99boxcache.$$"
+
+    vagrant sudo lvcreate -V100G -T -n "${nm_lxd}" inception/docker || true
+    vagrant sudo mkdir -p "/mnt/${nm_lxd}"
+    if vagrant sudo mkfs.ext4 "/dev/inception/${nm_lxd}"; then
+      vagrant sudo mount "/dev/inception/${nm_lxd}" "/mnt/${nm_lxd}"
+      vagrant sudo chown -R 100000:100000 "/mnt/${nm_lxd}"
+      vagrant sudo umount "/mnt/${nm_lxd}"
+    fi
+
+    if lxc exec "${nm_lxd}" -- mkdir /var/lib/docker 2>/dev/null; then
+      lxc config device add "${nm_lxd}" docker disk source="/dev/inception/${nm_lxd}" path=/var/lib/docker
+      lxc restart "${nm_lxd}"
+      while true; do
+        case "$(echo | lxc exec "${nm_lxd}" -- systemctl is-active cloud-final.service)" in
+          active|failed) break ;;
+          *) sleep 2 ;;
+        esac
+      done
+    fi
+
+    lxc exec "${nm_lxd}" -- add-apt-repository -y ppa:ubuntu-lxc/lxd-stable
+    lxc exec "${nm_lxd}" -- apt update
+    lxc exec "${nm_lxd}" -- env DEBIAN_FRONTEND=noninteractive apt -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" install -y docker.io lxd zfsutils-linux criu lxd-tools
+    lxc exec "${nm_lxd}" -- env DEBIAN_FRONTEND=noninteractive apt -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" upgrade -y
+
+    lxc exec "${nm_lxd}" -- usermod -aG lxd ubuntu
+    lxc exec "${nm_lxd}" -- usermod -aG docker ubuntu
+
+    lxc exec "${nm_lxd}" -- lxc profile set default security.nesting true
+    lxc exec "${nm_lxd}" -- lxc profile set default security.privileged true
+    lxc exec "${nm_lxd}" -- lxc profile device set default eth0 parent fan-250
+    lxc exec "${nm_lxd}" -- lxc profile device set default eth0 mtu 1498
+
+  fi
+
+  lxc exec "${nm_lxd}" -- service lxd stop
+  cat <<EOF | lxc exec "${nm_lxd}" -- tee /etc/default/lxd-bridge
+USE_LXD_BRIDGE="false"
+LXD_BRIDGE="lxdbr0"
+UPDATE_PROFILE="false"
+LXD_CONFILE=""
+LXD_DOMAIN="lxd"
+LXD_IPV4_ADDR=""
+LXD_IPV4_NETMASK=""
+LXD_IPV4_NETWORK=""
+LXD_IPV4_DHCP_RANGE=""
+LXD_IPV4_DHCP_MAX=""
+LXD_IPV4_NAT="true"
+LXD_IPV6_ADDR=""
+LXD_IPV6_MASK=""
+LXD_IPV6_NETWORK=""
+LXD_IPV6_NAT="false"
+LXD_IPV6_PROXY="false"
+EOF
+  lxc exec "${nm_lxd}" -- service lxd start
+
+  limbo network init
+
+  while true; do
+    case "$(echo | lxc exec "${nm_lxd}" -- systemctl is-active cloud-final.service)" in
+      active|failed) break ;;
+      *) sleep 2 ;;
+    esac
+  done
+
+  for a in 1 2; do
+    lxc exec "${nm_lxd}" -- rm -f /var/lib/cloud/instance
+    lxc exec "${nm_lxd}" -- cloud-init init
+  done
+
+  local ip_lxd="$(lxc list "${nm_lxd}" --format json | jq -r '.[].state.network.eth0.addresses[] | select(.family == "inet").address')"
+  ssh-keygen -R "$ip_lxd"
+  vagrant sudo ip route add "250.${ip_lxd#*.*.}.0/24" via "${ip_lxd%.*}.1"
+
+  lxc exec "${nm_lxd}" -- rm -f /etc/docker/key.json
+  docker machine rm -f "$nm_lxd" 2>/dev/null || true
+
+  lxc exec "${nm_lxd}" -- sudo systemctl start docker.service
+  docker machine create --driver generic --generic-ip-address "$ip_lxd" --generic-ssh-user ubuntu \
+    --engine-install-url="" \
+    --engine-storage-driver="overlay" \
+    --engine-opt="bridge=fan-250" \
+    --engine-opt="mtu=1480" \
+    --engine-opt="iptables=false" \
+    --engine-opt="fixed-cidr=250.$(lxc list --format json "${nm_lxd}" | jq -r '.[] | .state.network.eth0.addresses[] | select(.scope == "global") | .address' | cut -d. -f3-4).0/24" \
+    --engine-opt="insecure-registry=172.28.128.1:5000" \
+    --engine-opt="insecure-registry=172.28.128.1:5001" \
+    "$nm_lxd"
+}
+
+source sub "$BASH_SOURCE" "$@"

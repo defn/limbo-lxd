@@ -14,7 +14,11 @@ function main {
 
   if [[ "$#" -gt 0 ]]; then
     local net_lxd="$1"; shift
-    local net_host="$1"; shift
+    local net_host=
+    
+    if [[ "$#" -gt 0 ]]; then
+      net_host="$1"; shift
+    fi
 
     rm -rf "$LXD_CONF"
     mkdir -p "$LXD_CONF"
@@ -40,20 +44,22 @@ LXD_IPV6_NAT="false"
 LXD_IPV6_PROXY="false"
 EOF
 
+    if [[ -n "${net_host}" ]]; then
       cat <<EOF | "${BASEBOX_INSTANCE}" vagrant ssh -- sudo tee /etc/network/interfaces.d/99-limbo-fan.cfg
 auto lxdbr0
 iface lxdbr0 inet manual
   up ip addr add "${net_host}.1/24" dev lxdbr0:0
   up fanctl up -o 250.0.0.0/8 -u "${net_host}.1/16"
 EOF
+    fi
 
     "${BASEBOX_INSTANCE}" vagrant ssh -- sudo service lxd start
 
-    vagrant=("${BASEBOX_INSTANCE}" vagrant ssh --)
+    local vagrant=("${BASEBOX_INSTANCE}" vagrant ssh --)
     local ip_dream="$BASEBOX_IP"
     local fl_privileged=false
   else
-    vagrant=("${BASEBOX_DREAM}" lxc exec "${BASEBOX_INSTANCE}" --)
+    local vagrant=("${BASEBOX_DREAM}" lxc exec "${BASEBOX_INSTANCE}" --)
     local ip_dream="$("${BASEBOX_DREAM}" lxc list --format=json "${BASEBOX_INSTANCE}" | jq -r '.[] | .state.network.eth0.addresses[] | select(.scope == "global") | .address')"
     local fl_privileged=true
   fi
