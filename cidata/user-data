@@ -9,11 +9,19 @@ Content-Type: text/cloud-config
 Content-Disposition: attachment; filename="part-001"
 
 users:
-  - name: ubuntu
-    shell: /bin/bash
-    sudo: "ALL=(ALL) NOPASSWD: ALL"
-    ssh-authorized-keys:
-      - ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC/N6HiRsxmFv+yNl06CmmqkihRrHQLiTZEXbldjk9JX8Kexs3oznx9HYmUDR78+Q6mmME6e6ZOluQLDkt6nth4eJnp8dEYvTx0pyfGks+WdE7HQKTysCqGQWtQe0YxqWrzpsX/SXUkK2Dbv1QGEOMrTEguFyCFxRb6ba89NY2JfaCKHpWQpA40zVkYrLphUoodqteZFqhGFUqMvZpczPWCAqzRCAU1MKqZQ/OmXrrai+D5DOZi4nTGLJCAuKTcX0OzkKf9NZ/42WrLD1YgEOwkocEMyQGZdDRB8sD2w+JsT9tl3CdMZpRCO6Xe3Rm9wObXTEWhMYELGGT8OUT8DMbt dnghiem@ip-192-168-128-144.us-west-2.compute.internal
+ - name: ubuntu
+   shell: /bin/bash
+   sudo: "ALL=(ALL) NOPASSWD: ALL"
+   ssh-authorized-keys:
+    - ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC/N6HiRsxmFv+yNl06CmmqkihRrHQLiTZEXbldjk9JX8Kexs3oznx9HYmUDR78+Q6mmME6e6ZOluQLDkt6nth4eJnp8dEYvTx0pyfGks+WdE7HQKTysCqGQWtQe0YxqWrzpsX/SXUkK2Dbv1QGEOMrTEguFyCFxRb6ba89NY2JfaCKHpWQpA40zVkYrLphUoodqteZFqhGFUqMvZpczPWCAqzRCAU1MKqZQ/OmXrrai+D5DOZi4nTGLJCAuKTcX0OzkKf9NZ/42WrLD1YgEOwkocEMyQGZdDRB8sD2w+JsT9tl3CdMZpRCO6Xe3Rm9wObXTEWhMYELGGT8OUT8DMbt dnghiem@ip-192-168-128-144.us-west-2.compute.internal
+
+write_files:
+ - owner: root:root
+   path: /etc/apt/apt.conf.d/99boxcache
+   permissions: '0644'
+   content: |
+       Acquire::http::Proxy "http://172.28.128.1:3128";
+       Acquire::Languages "none";
 
 packages:
  - openssh-server
@@ -38,6 +46,7 @@ packages:
  - ubuntu-fan
 
 runcmd:
+  - touch /root/.cloud-init.hostname
   - install -d -o root -g root -m 0755  /var/run/sshd
 
 --===============88888888888888888888888888==

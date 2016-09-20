@@ -68,13 +68,6 @@ EOF
 
     lxc exec "${nm_lxd}" -- systemctl enable lxd.service
 
-    {
-      echo "Acquire::http::Proxy \"http://$CACHE_VIP:3128\";" 
-      echo 'Acquire::Languages "none";'
-    } > ".99boxcache.$$" 
-    lxc file push ".99boxcache.$$" "${nm_lxd}"/etc/apt/apt.conf.d/99boxcache
-    rm -f ".99boxcache.$$"
-
     vagrant sudo lvcreate -V100G -T -n "${nm_lxd}" inception/docker || true
     vagrant sudo mkdir -p "/mnt/${nm_lxd}"
     if vagrant sudo mkfs.ext4 "/dev/inception/${nm_lxd}"; then
