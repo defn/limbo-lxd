@@ -16,7 +16,7 @@ function main {
     local vagrant=("${BASEBOX_DREAM}" lxc exec "${BASEBOX_DREAMER}" --)
     local ip_dream="$("${BASEBOX_DREAM}" lxc list --format=json "${BASEBOX_DREAMER}" | jq -r '[.[].state.network | [.eth0//[],.br0//[]]] | flatten[].addresses[] | select(.family == "inet").address')"
     local fl_privileged=true
-    local if_parent='eth0'
+    local if_parent='br0'
   else
     local vagrant=("${BASEBOX_INSTANCE}" vagrant ssh --)
     local ip_dream="$BASEBOX_IP"
