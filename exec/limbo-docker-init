@@ -130,7 +130,7 @@ EOF
     lxc exec "${nm_lxd}" -- cloud-init init
   done
 
-  local ip_lxd="$(lxc list "${nm_lxd}" --format json | jq -r '.[].state.network.br0.addresses[] | select(.family == "inet").address')"
+  local ip_lxd="$(lxc list "${nm_lxd}" --format json | jq -r '[.[].state.network.br0.addresses[] | select(.family == "inet").address][-1]')"
   ssh-keygen -R "$ip_lxd"
   #vagrant sudo ip route add "250.${ip_lxd#*.*.}.0/24" via "${ip_lxd%.*}.1"
 
@@ -144,7 +144,7 @@ EOF
     --engine-opt="bridge=br0" \
     --engine-opt="mtu=1480" \
     --engine-opt="iptables=false" \
-    --engine-opt="fixed-cidr=250.$(lxc list --format json "${nm_lxd}" | jq -r '.[] | .state.network.br0.addresses[] | select(.scope == "global") | .address' | cut -d. -f3-4).0/24" \
+    --engine-opt="fixed-cidr=250.$(lxc list --format json "${nm_lxd}" | jq -r '[.[].state.network.br0.addresses[] | select(.scope == "global").address][-1]' | cut -d. -f3-4).0/24" \
     --engine-opt="insecure-registry=172.28.128.1:5000" \
     --engine-opt="insecure-registry=172.28.128.1:5001" \
     "$nm_lxd"
