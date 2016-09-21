@@ -16,10 +16,12 @@ function main {
     local vagrant=("${BASEBOX_DREAM}" lxc exec "${BASEBOX_DREAMER}" --)
     local ip_dream="$("${BASEBOX_DREAM}" lxc list --format=json "${BASEBOX_DREAMER}" | jq -r '[.[].state.network | [.eth0//[],.br0//[]]] | flatten[].addresses[] | select(.family == "inet").address')"
     local fl_privileged=true
+    local if_parent='eth0'
   else
     local vagrant=("${BASEBOX_INSTANCE}" vagrant ssh --)
     local ip_dream="$BASEBOX_IP"
     local fl_privileged=false
+    local if_parent='fan-250'
   fi
 
   if [[ "$#" -gt 0 ]]; then
@@ -91,7 +93,7 @@ EOF
   lxc profile set default security.nesting true
   lxc profile set default user.network_mode "dhcp"
   lxc profile unset default environment.proxy_http
-  lxc profile device set default eth0 parent fan-250
+  lxc profile device set default eth0 parent "$if_parent"
   lxc profile device set default eth0 mtu 1498
 
   vagrant lxc image copy ubuntu:16.04 local: --alias xenial
