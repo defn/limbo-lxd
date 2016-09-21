@@ -13,8 +13,8 @@ function main {
   set -x
 
   if [[ "$#" == 0 ]]; then
-    local vagrant=("${BASEBOX_DREAM}" lxc exec "${BASEBOX_INSTANCE}" --)
-    local ip_dream="$("${BASEBOX_DREAM}" lxc list --format=json "${BASEBOX_INSTANCE}" | jq -r '.[] | .state.network.eth0.addresses[] | select(.scope == "global") | .address')"
+    local vagrant=("${BASEBOX_DREAM}" lxc exec "${BASEBOX_DREAMER}" --)
+    local ip_dream="$("${BASEBOX_DREAM}" lxc list --format=json "${BASEBOX_DREAMER}" | jq -r '.[] | .state.network.eth0.addresses[] | select(.scope == "global") | .address')"
     local fl_privileged=true
   else
     local vagrant=("${BASEBOX_INSTANCE}" vagrant ssh --)
