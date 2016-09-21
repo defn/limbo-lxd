@@ -12,30 +12,50 @@ function main {
   
   set -x
 
-  if [[ "$#" -gt 0 ]]; then
-    local net_lxd="$1"; shift
-    local net_host=
-    
-    if [[ "$#" -gt 0 ]]; then
-      net_host="$1"; shift
-    fi
+  if [[ "$#" == 0 ]]; then
+    local vagrant=("${BASEBOX_DREAM}" lxc exec "${BASEBOX_INSTANCE}" --)
+    local ip_dream="$("${BASEBOX_DREAM}" lxc list --format=json "${BASEBOX_INSTANCE}" | jq -r '.[] | .state.network.eth0.addresses[] | select(.scope == "global") | .address')"
+    local fl_privileged=true
+  else
+    local vagrant=("${BASEBOX_INSTANCE}" vagrant ssh --)
+    local ip_dream="$BASEBOX_IP"
+    local fl_privileged=false
+  fi
 
+  if [[ "$#" -gt 0 ]]; then
     rm -rf "$LXD_CONF"
     mkdir -p "$LXD_CONF"
 
-    "${BASEBOX_INSTANCE}" vagrant ssh -- sudo service lxd stop 2>/dev/null || true
+    vagrant ifconfig -a
+    cat <<EOF | vagrant sudo tee /etc/network/interfaces.d/99-limbo-fan.cfg
+auto enp0s9
+iface enp0s9 inet manual
+    up fanctl up -o 250.0.0.0/8 -u "${BASEBOX_IP}/16" --dhcp
+    down fanctl down -o 250.0.0.0/8 -u "${BASEBOX_IP}/16"
+
+auto br0
+iface br0 inet static
+    address ${BASEBOX_IP}
+    gateway ${BASEBOX_IP%.*}.1
+    network ${BASEBOX_IP%.*}.0
+    gateway ${BASEBOX_IP%.*}.255
+    netmask 255.255.255.0
+    bridge-ifaces enp0s9
+    bridge-ports enp0s9
+    up ifconfig enp0s9 up
+EOF
 
     cat <<EOF | "${BASEBOX_INSTANCE}" vagrant ssh -- sudo tee /etc/default/lxd-bridge
-USE_LXD_BRIDGE="true"
+USE_LXD_BRIDGE="false"
 LXD_BRIDGE="lxdbr0"
-UPDATE_PROFILE="true"
+UPDATE_PROFILE="false"
 LXD_CONFILE=""
-LXD_DOMAIN="${BASEBOX_INSTANCE}"
-LXD_IPV4_ADDR="${net_lxd}.1"
-LXD_IPV4_NETMASK="255.255.255.0"
-LXD_IPV4_NETWORK="${net_lxd}.1/24"
-LXD_IPV4_DHCP_RANGE="${net_lxd}.10,${net_lxd}.200"
-LXD_IPV4_DHCP_MAX="191"
+LXD_DOMAIN=""
+LXD_IPV4_ADDR=""
+LXD_IPV4_NETMASK=""
+LXD_IPV4_NETWORK=""
+LXD_IPV4_DHCP_RANGE=""
+LXD_IPV4_DHCP_MAX=""
 LXD_IPV4_NAT="true"
 LXD_IPV6_ADDR=""
 LXD_IPV6_MASK=""
@@ -44,41 +64,36 @@ LXD_IPV6_NAT="false"
 LXD_IPV6_PROXY="false"
 EOF
 
-    if [[ -n "${net_host}" ]]; then
-      cat <<EOF | "${BASEBOX_INSTANCE}" vagrant ssh -- sudo tee /etc/network/interfaces.d/99-limbo-fan.cfg
-auto lxdbr0
-iface lxdbr0 inet manual
-  up ip addr add "${net_host}.1/24" dev lxdbr0:0
-  up fanctl up -o 250.0.0.0/8 -u "${net_host}.1/16"
-EOF
-    fi
+    vagrant sudo add-apt-repository -y ppa:ubuntu-lxc/lxd-stable
+    vagrant sudo apt update
+    vagrant sudo env DEBIAN_FRONTEND=noninteractive apt -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" install -y lxd zfsutils-linux criu lxd-tools
+    vagrant sudo env DEBIAN_FRONTEND=noninteractive apt -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" upgrade -y
 
-    "${BASEBOX_INSTANCE}" vagrant ssh -- sudo service lxd start
+    vagrant sudo systemctl enable lxd
 
-    local vagrant=("${BASEBOX_INSTANCE}" vagrant ssh --)
-    local ip_dream="$BASEBOX_IP"
-    local fl_privileged=false
-  else
-    local vagrant=("${BASEBOX_DREAM}" lxc exec "${BASEBOX_INSTANCE}" --)
-    local ip_dream="$("${BASEBOX_DREAM}" lxc list --format=json "${BASEBOX_INSTANCE}" | jq -r '.[] | .state.network.eth0.addresses[] | select(.scope == "global") | .address')"
-    local fl_privileged=true
+    vagrant sudo usermod -aG lxd ubuntu
+
+    "${BASEBOX_DREAM}" vagrant reload
   fi
 
   local lxd_pass="${RANDOM}-$$-$(date +%s)"
 
-  vagrant sudo lxc config set core.https_address '[::]'
-  vagrant sudo lxc config set core.trust_password "$lxd_pass"
+  vagrant sudo systemctl start lxd
+  vagrant lxc config set core.https_address '[::]'
+  vagrant lxc config set core.trust_password "$lxd_pass"
 
   lxc remote rename "$BASEBOX_INSTANCE" "$BASEBOX_INSTANCE"old 2>/dev/null || true
   lxc remote add --accept-certificate "$BASEBOX_INSTANCE" "$ip_dream" --password="$lxd_pass"
   lxc remote set-default "$BASEBOX_INSTANCE" 
   lxc remote remove "$BASEBOX_INSTANCE"old 2>/dev/null || true
 
-  lxc profile set default security.nesting true
   lxc profile set default security.privileged "$fl_privileged"
+  lxc profile set default security.nesting true
   lxc profile set default user.network_mode "dhcp"
+  lxc profile unset default environment.proxy_http
+  lxc profile device set default eth0 parent fan-250
+  lxc profile device set default eth0 mtu 1498
 
-  vagrant sudo chown -R ubuntu:ubuntu .config
   vagrant lxc image copy ubuntu:16.04 local: --alias xenial
 
   lxc profile create limbo 2>/dev/null || true
