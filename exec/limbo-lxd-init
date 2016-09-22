@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 
-vagrant=""
+host=""
 
 function lxd_host {
-  command "${vagrant[@]}" "$@"
+  command "${host[@]}" "$@"
 }
 
 function main {
@@ -15,17 +15,15 @@ function main {
   local lxd_pass="${RANDOM}-$$-$(date +%s)"
 
   if [[ "$#" == 0 ]]; then
-    local vagrant=("${BASEBOX_DREAM}" lxc exec "${BASEBOX_DREAMER}" --)
+    local host=("${BASEBOX_DREAM}" lxc exec "${BASEBOX_DREAMER}" --)
     local ip_dream="$("${BASEBOX_DREAM}" lxc list --format=json "${BASEBOX_DREAMER}" | jq -r '[.[].state.network | [.eth0//[],.br0//[]]] | flatten[].addresses[] | select(.family == "inet").address')"
     local fl_privileged=true
-
-    lxd_host sudo systemctl start lxd
-    lxd_host lxc config set core.https_address '[::]'
-    lxd_host lxc config set core.trust_password "$lxd_pass"
+    local if_parent='br0'
   else
-    local vagrant=("${BASEBOX_INSTANCE}" lxd_host ssh --)
+    local host=("${BASEBOX_INSTANCE}" lxd_host ssh --)
     local ip_dream="$BASEBOX_IP"
     local fl_privileged=false
+    local if_parent='fan-250'
   fi
 
   if [[ "$#" -gt 0 ]]; then
@@ -95,7 +93,7 @@ EOF
   lxc profile set limbo security.nesting true
   lxc profile set limbo user.network_mode "dhcp"
   lxc profile unset limbo environment.proxy_http
-  lxc profile device set limbo eth0 parent fan-250
+  lxc profile device set default eth0 parent "$if_parent"
   lxc profile device set limbo eth0 mtu 1498
 
   lxc image copy ubuntu:16.04 local: --alias xenial
