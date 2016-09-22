@@ -2,7 +2,7 @@
 
 vagrant=""
 
-function vagrant {
+function lxd_host {
   command "${vagrant[@]}" "$@"
 }
 
@@ -12,12 +12,18 @@ function main {
   
   set -x
 
+  local lxd_pass="${RANDOM}-$$-$(date +%s)"
+
   if [[ "$#" == 0 ]]; then
     local vagrant=("${BASEBOX_DREAM}" lxc exec "${BASEBOX_DREAMER}" --)
     local ip_dream="$("${BASEBOX_DREAM}" lxc list --format=json "${BASEBOX_DREAMER}" | jq -r '[.[].state.network | [.eth0//[],.br0//[]]] | flatten[].addresses[] | select(.family == "inet").address')"
     local fl_privileged=true
+
+    lxd_host sudo systemctl start lxd
+    lxd_host lxc config set core.https_address '[::]'
+    lxd_host lxc config set core.trust_password "$lxd_pass"
   else
-    local vagrant=("${BASEBOX_INSTANCE}" vagrant ssh --)
+    local vagrant=("${BASEBOX_INSTANCE}" lxd_host ssh --)
     local ip_dream="$BASEBOX_IP"
     local fl_privileged=false
   fi
@@ -26,8 +32,8 @@ function main {
     rm -rf "$LXD_CONF"
     mkdir -p "$LXD_CONF"
 
-    vagrant ifconfig -a
-    cat <<EOF | vagrant sudo tee /etc/network/interfaces.d/99-limbo-fan.cfg
+    lxd_host ifconfig -a
+    cat <<EOF | lxd_host sudo tee /etc/network/interfaces.d/99-limbo-fan.cfg
 auto enp0s9
 iface enp0s9 inet manual
     up fanctl up -o 250.0.0.0/8 -u "${BASEBOX_IP}/16" --dhcp
@@ -45,7 +51,7 @@ iface br0 inet static
     up ifconfig enp0s9 up
 EOF
 
-    cat <<EOF | "${BASEBOX_INSTANCE}" vagrant ssh -- sudo tee /etc/default/lxd-bridge
+    cat <<EOF | "${BASEBOX_INSTANCE}" lxd_host ssh -- sudo tee /etc/default/lxd-bridge
 USE_LXD_BRIDGE="false"
 LXD_BRIDGE="lxdbr0"
 UPDATE_PROFILE="false"
@@ -64,40 +70,36 @@ LXD_IPV6_NAT="false"
 LXD_IPV6_PROXY="false"
 EOF
 
-    vagrant sudo add-apt-repository -y ppa:ubuntu-lxc/lxd-stable
-    vagrant sudo apt update
-    vagrant sudo env DEBIAN_FRONTEND=noninteractive apt -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" install -y lxd zfsutils-linux criu lxd-tools
-    vagrant sudo env DEBIAN_FRONTEND=noninteractive apt -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" upgrade -y
-
-    vagrant sudo systemctl enable lxd
-
-    vagrant sudo usermod -aG lxd ubuntu
+    lxd_host sudo add-apt-repository -y ppa:ubuntu-lxc/lxd-stable
+    lxd_host sudo apt update
+    lxd_host sudo env DEBIAN_FRONTEND=noninteractive apt -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" install -y lxd zfsutils-linux criu lxd-tools
+    lxd_host sudo env DEBIAN_FRONTEND=noninteractive apt -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" upgrade -y
+    lxd_host sudo systemctl enable lxd
 
     "${BASEBOX_DREAM}" vagrant reload
   fi
 
-  local lxd_pass="${RANDOM}-$$-$(date +%s)"
-
-  vagrant sudo systemctl start lxd
-  vagrant lxc config set core.https_address '[::]'
-  vagrant lxc config set core.trust_password "$lxd_pass"
+  lxd_host sudo usermod -aG lxd ubuntu
+  lxd_host sudo systemctl start lxd
+  lxd_host lxc config set core.https_address '[::]'
+  lxd_host lxc config set core.trust_password "$lxd_pass"
 
   lxc remote rename "$BASEBOX_INSTANCE" "$BASEBOX_INSTANCE"old 2>/dev/null || true
   lxc remote add --accept-certificate "$BASEBOX_INSTANCE" "$ip_dream" --password="$lxd_pass"
   lxc remote set-default "$BASEBOX_INSTANCE" 
   lxc remote remove "$BASEBOX_INSTANCE"old 2>/dev/null || true
 
-  lxc profile set default security.privileged "$fl_privileged"
-  lxc profile set default security.nesting true
-  lxc profile set default user.network_mode "dhcp"
-  lxc profile unset default environment.proxy_http
-  lxc profile device set default eth0 parent fan-250
-  lxc profile device set default eth0 mtu 1498
-
-  vagrant lxc image copy ubuntu:16.04 local: --alias xenial
-
   lxc profile create limbo 2>/dev/null || true
   lxc profile set limbo user.user-data - < "$shome/cidata/user-data"
+  lxc profile set limbo security.privileged "$fl_privileged"
+  lxc profile set limbo security.nesting true
+  lxc profile set limbo user.network_mode "dhcp"
+  lxc profile unset limbo environment.proxy_http
+  lxc profile device set limbo eth0 parent fan-250
+  lxc profile device set limbo eth0 mtu 1498
+
+  lxc image copy ubuntu:16.04 local: --alias xenial
+
 }
 
 source sub "$BASH_SOURCE" "$@"
