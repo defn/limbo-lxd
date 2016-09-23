@@ -24,9 +24,7 @@ function main {
     local ip_dream="$BASEBOX_IP"
     local fl_privileged=false
     local if_parent='fan-250'
-  fi
 
-  if [[ "$#" -gt 0 ]]; then
     rm -rf "$LXD_CONF"
     mkdir -p "$LXD_CONF"
 
@@ -49,7 +47,7 @@ iface br0 inet static
     up ifconfig enp0s9 up
 EOF
 
-    cat <<EOF | "${BASEBOX_INSTANCE}" lxd_host ssh -- sudo tee /etc/default/lxd-bridge
+    cat <<EOF | lxd_host sudo tee /etc/default/lxd-bridge
 USE_LXD_BRIDGE="false"
 LXD_BRIDGE="lxdbr0"
 UPDATE_PROFILE="false"
