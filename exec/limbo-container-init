@@ -1,0 +1,156 @@
+#!/usr/bin/env bash
+
+function vagrant_host {
+  (unset VAGRANT_DEFAULT_PROVIDER; limbo vagrant ssh -- "$@")
+}
+
+function lxc {
+  limbo lxc "$@"
+}
+
+function lxd_host {
+  lxc exec "${nm_lxd}" -- "$@"
+}
+
+function main {
+  local shome="$(cd -P -- "${BASH_SOURCE%/*}/.." && pwd -P)"
+  source "$shome/script/profile"
+
+  local nm_lxd="${BASEBOX_NAME}"
+  local nm_snapshot=
+
+  if [[ -n "${1:-}" ]]; then
+    nm_lxd="$1"; shift
+  fi
+
+  if [[ -n "${1:-}" ]]; then
+    nm_snapshot="$1"; shift
+  fi
+
+  set -x
+
+  if [[ -n "$nm_snapshot" ]]; then
+    local nm_snapshot_lvm=
+    if [[ -n "${1:-}" ]]; then
+      nm_snapshot_lvm="$1"; shift
+    else
+      nm_snapshot_lvm="$nm_snapshot"
+  fi
+
+    if ! lxc copy "$nm_snapshot" "${nm_lxd}"; then
+      lxc stop "${nm_lxd}"
+    fi
+    vagrant_host sudo lvcreate -s -n "${nm_lxd}" "$nm_snapshot_lvm"
+    vagrant_host sudo lvchange -ay -K "inception/${nm_lxd}"
+    lxc config device set "${nm_lxd}" docker source "/dev/inception/${nm_lxd}"
+    lxc start "${nm_lxd}"
+  else
+    lxc launch xenial "${nm_lxd}" -p default -p docker -p limbo -c boot.autostart=false
+    lxd_host touch /root/.cloud-init.hostname
+    while true; do
+      case "$(echo | lxd_host systemctl is-active cloud-final.service)" in
+        active|failed) break ;;
+        *) sleep 2 ;;
+      esac
+    done
+
+    for a in 1 2; do
+      lxd_host rm -f /var/lib/cloud/instance
+      lxd_host cloud-init init
+    done
+
+    cat <<EOF | lxd_host tee /etc/cloud/cloud.cfg.d/99-disable-network-config.cfg
+network: {config: disabled}
+EOF
+
+    cat <<EOF | lxd_host tee /etc/network/interfaces.d/50-cloud-init.cfg
+auto lo
+iface lo inet loopback
+
+auto eth0
+iface eth0 inet manual
+EOF
+
+    cat <<EOF | lxd_host tee /etc/network/interfaces.d/99-limbo-fan.cfg
+auto br0
+iface br0 inet dhcp
+    bridge-ifaces eth0
+    bridge-ports eth0
+    up ifconfig eth0 up
+EOF
+
+		ifdown eth0 || true
+		ifup br0 || true
+		ifconfig -a	
+
+    lxd_host systemctl enable lxd.service
+
+    vagrant_host sudo lvcreate -V100G -T -n "${nm_lxd}" inception/docker || true
+    vagrant_host sudo mkdir -p "/mnt/${nm_lxd}"
+    if vagrant_host sudo mkfs.ext4 "/dev/inception/${nm_lxd}"; then
+      vagrant_host sudo mount "/dev/inception/${nm_lxd}" "/mnt/${nm_lxd}"
+      vagrant_host sudo chown -R 100000:100000 "/mnt/${nm_lxd}"
+      vagrant_host sudo umount "/mnt/${nm_lxd}"
+    fi
+
+    if lxd_host mkdir /var/lib/docker 2>/dev/null; then
+      lxc config device add "${nm_lxd}" docker disk source="/dev/inception/${nm_lxd}" path=/var/lib/docker
+      lxc restart "${nm_lxd}"
+      while true; do
+        case "$(echo | lxd_host systemctl is-active cloud-final.service)" in
+          active|failed) break ;;
+          *) sleep 2 ;;
+        esac
+      done
+    fi
+
+    lxd_host add-apt-repository -y ppa:ubuntu-lxc/lxd-stable
+    lxd_host apt update
+    lxd_host env DEBIAN_FRONTEND=noninteractive apt -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" install -y docker.io lxd zfsutils-linux criu lxd-tools
+    lxd_host env DEBIAN_FRONTEND=noninteractive apt -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" upgrade -y
+
+    lxd_host usermod -aG lxd ubuntu
+    lxd_host usermod -aG docker ubuntu
+
+    lxd_host lxc profile set default security.nesting true
+    lxd_host lxc profile set default security.privileged true
+    lxd_host lxc profile set default user.network_mode "dhcp"
+    lxd_host lxc profile unset default environment.proxy_http
+    lxd_host lxc profile device set default eth0 parent br0
+    lxd_host lxc profile device set default eth0 mtu 1498
+  fi
+
+  limbo network init
+
+  while true; do
+    case "$(echo | lxd_host systemctl is-active cloud-final.service)" in
+      active|failed) break ;;
+      *) sleep 2 ;;
+    esac
+  done
+
+  for a in 1 2; do
+    lxd_host rm -f /var/lib/cloud/instance
+    lxd_host cloud-init init
+  done
+
+  local ip_lxd="$(lxc list "${nm_lxd}" --format json | jq -r '[.[].state.network.br0.addresses[] | select(.family == "inet").address][-1]')"
+  ssh-keygen -R "$ip_lxd"
+
+  lxd_host rm -f /etc/docker/key.json
+  docker machine rm -f "$nm_lxd" 2>/dev/null || true
+
+  lxd_host sudo systemctl start docker.service
+  docker machine create --driver generic --generic-ip-address "$ip_lxd" --generic-ssh-user ubuntu \
+    --engine-install-url="" \
+    --engine-storage-driver="overlay" \
+    --engine-opt="bridge=br0" \
+    --engine-opt="mtu=1480" \
+    --engine-opt="iptables=false" \
+    --engine-opt="fixed-cidr=250.$(lxc list --format json "${nm_lxd}" | jq -r '[.[].state.network.br0.addresses[] | select(.scope == "global").address][-1]' | cut -d. -f3-4).0/24" \
+    --engine-opt="insecure-registry=172.28.128.1:5000" \
+    --engine-opt="insecure-registry=172.28.128.1:5001" \
+    "$nm_lxd"
+}
+
+source sub "$BASH_SOURCE" "$@"
